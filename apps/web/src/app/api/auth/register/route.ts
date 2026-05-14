@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getDb } from "@/lib/db";
 import { hashPassword, createSession } from "@/lib/auth";
 import { apiError } from "@/lib/api-helpers";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LEN = 10;
@@ -17,6 +18,9 @@ function normalizeDeviceLabel(raw: string | null): string {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const rateLimited = enforceRateLimit(req, "auth:register", 5, 15 * 60 * 1000);
+  if (rateLimited) return rateLimited;
+
   let body: { email?: string; name?: string; password?: string };
   try {
     body = await req.json();

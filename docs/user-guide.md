@@ -53,6 +53,12 @@ Click **Edit** on any card to:
 
 Click **Save** to apply changes or **Cancel** to discard.
 
+### Version History and Concurrent Editing
+
+- Click **History** on an activity card to view its saved state history.
+- Edits use optimistic concurrency (`expected_version`) to prevent silent overwrite when two sessions edit the same record.
+- If a conflict is detected, the app asks you to reload the latest data.
+
 ### Approving an Activity
 
 Click **Approve** to mark an activity as ready for worklog draft generation.
@@ -74,6 +80,10 @@ Click **+ Add manual entry** to create an activity for anything not automaticall
 - Meetings, calls, design sessions, code reviews
 - Activities from tools not yet connected
 
+### Exporting Activities
+
+Use **Export JSON** or **Export CSV** in the Activities toolbar.
+
 ---
 
 ## Worklogs Tab
@@ -81,6 +91,8 @@ Click **+ Add manual entry** to create an activity for anything not automaticall
 This tab shows all generated worklog drafts.
 
 Filter by **Pending** (not yet logged), **Logged** (confirmed), or **All**.
+
+Use **Export JSON** or **Export CSV** to download worklog drafts.
 
 ### Submitting a Worklog
 

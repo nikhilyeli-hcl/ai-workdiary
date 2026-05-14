@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, apiError } from "@/lib/api-helpers";
 import { getDb } from "@/lib/db";
-import type { JWTPayload, ActivityStatus } from "@/types";
+import { recordActivityVersion } from "@/lib/activity-history";
+import type { Activity, JWTPayload, ActivityStatus } from "@/types";
 
 const VALID_STATUSES: ActivityStatus[] = [
   "pending", "reviewed", "approved", "skipped",
@@ -26,19 +27,9 @@ export const PATCH = withAuth(
     const existing = db
       .prepare("SELECT * FROM activities WHERE id = ? AND user_id = ?")
       .get(params?.id, payload.sub) as
-      | { id: string; status: string }
+      | Activity
       | undefined;
     if (!existing) return apiError("Activity not found", 404);
-
-    // Once approved, only allow un-approving back to reviewed
-    if (existing.status === "approved") {
-      const body = await req.json().catch(() => ({})) as { status?: string };
-      if (body.status && body.status !== "reviewed") {
-        return apiError(
-          "Approved activities can only be moved back to 'reviewed' status"
-        );
-      }
-    }
 
     let body: {
       title?: string;
@@ -46,6 +37,7 @@ export const PATCH = withAuth(
       ticket_number?: string;
       worklog_note?: string;
       status?: string;
+      expected_version?: number;
     };
     try {
       body = await req.json();
@@ -53,13 +45,24 @@ export const PATCH = withAuth(
       return apiError("Invalid JSON body");
     }
 
-    const { title, description, ticket_number, worklog_note, status } = body;
+    const { title, description, ticket_number, worklog_note, status, expected_version } = body;
+
+    if (!Number.isInteger(expected_version) || (expected_version ?? 0) < 1) {
+      return apiError("expected_version must be a positive integer");
+    }
+
+    // Once approved, only allow un-approving back to reviewed
+    if (existing.status === "approved" && status && status !== "reviewed") {
+      return apiError(
+        "Approved activities can only be moved back to 'reviewed' status"
+      );
+    }
 
     if (status && !VALID_STATUSES.includes(status as ActivityStatus)) {
       return apiError(`status must be one of: ${VALID_STATUSES.join(", ")}`);
     }
 
-    const updates: string[] = ["updated_at = datetime('now')"];
+    const updates: string[] = ["updated_at = datetime('now')", "version = version + 1"];
     const vals: unknown[] = [];
 
     if (title !== undefined) { updates.push("title = ?"); vals.push(title.trim()); }
@@ -71,12 +74,28 @@ export const PATCH = withAuth(
     if (updates.length === 1) return apiError("No fields to update");
 
     db.prepare(
-      `UPDATE activities SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`
-    ).run(...vals, params?.id, payload.sub);
+      `UPDATE activities
+       SET ${updates.join(", ")}
+       WHERE id = ? AND user_id = ? AND version = ?`
+    ).run(...vals, params?.id, payload.sub, expected_version);
 
     const updated = db
-      .prepare("SELECT * FROM activities WHERE id = ?")
-      .get(params?.id);
+      .prepare("SELECT * FROM activities WHERE id = ? AND user_id = ?")
+      .get(params?.id, payload.sub) as Activity | undefined;
+
+    if (!updated) return apiError("Activity not found", 404);
+
+    if (updated.version === existing.version) {
+      return NextResponse.json(
+        {
+          error: "Conflict: this activity was updated elsewhere",
+          activity: updated,
+        },
+        { status: 409 }
+      );
+    }
+
+    recordActivityVersion(updated, "updated");
     return NextResponse.json({ activity: updated });
   }
 );
@@ -86,12 +105,13 @@ export const DELETE = withAuth(
   async (_req: NextRequest, payload: JWTPayload, params): Promise<NextResponse> => {
     const db = getDb();
     const existing = db
-      .prepare("SELECT status FROM activities WHERE id = ? AND user_id = ?")
-      .get(params?.id, payload.sub) as { status: string } | undefined;
+      .prepare("SELECT * FROM activities WHERE id = ? AND user_id = ?")
+      .get(params?.id, payload.sub) as Activity | undefined;
     if (!existing) return apiError("Activity not found", 404);
     if (existing.status === "approved") {
       return apiError("Cannot delete an approved activity", 403);
     }
+    recordActivityVersion(existing, "deleted");
     db.prepare("DELETE FROM activities WHERE id = ?").run(params?.id);
     return NextResponse.json({ message: "Activity deleted" });
   }

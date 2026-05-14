@@ -10,6 +10,21 @@ let activeRefreshPromise: Promise<string | null> | null = null;
 
 function generateDeviceLabel(): string {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "Unknown";
+  const browser = ua.includes("Atlas")
+    ? "Atlas"
+    : ua.includes("Comet")
+    ? "Comet"
+    : ua.includes("OPR/") || ua.includes("Opera")
+    ? "Opera"
+    : ua.includes("Firefox/")
+    ? "Firefox"
+    : ua.includes("Edg/")
+    ? "Edge"
+    : ua.includes("Chrome/")
+    ? "Chrome"
+    : ua.includes("Safari/")
+    ? "Safari"
+    : "Unknown Browser";
   const platform = ua.includes("Windows")
     ? "Windows"
     : ua.includes("Mac")
@@ -21,7 +36,7 @@ function generateDeviceLabel(): string {
     : ua.includes("iPhone") || ua.includes("iPad")
     ? "iOS"
     : "Unknown";
-  return `${platform} - ${new Date().toLocaleDateString()}`;
+  return `${browser} on ${platform} - ${new Date().toLocaleDateString()}`;
 }
 
 export function getDeviceLabel(): string {

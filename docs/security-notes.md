@@ -22,6 +22,7 @@ AI Work Diary is designed to run safely on enterprise machines where the user **
 | Token rotation | New refresh token issued on every use |
 | Token reuse detection | Replay of an old refresh token immediately revokes the session |
 | Session cap | Max 10 active sessions per account; oldest evicted when cap is reached |
+| Login/register abuse controls | Basic per-IP in-memory rate limits on auth endpoints |
 | Timing-safe login | bcrypt always runs even for unknown emails (prevents user enumeration) |
 | Generic error message | Login failure returns "Invalid email or password" — no specifics |
 
@@ -35,6 +36,7 @@ AI Work Diary is designed to run safely on enterprise machines where the user **
 - Backups are the user's responsibility.
 - Browser `localStorage` is used only for client auth/session tokens (`wd_access_token`, `wd_refresh_token`, `wd_session_id`, `wd_device_label`).
 - Because tokens are in `localStorage`, XSS in the same origin would increase token exposure risk; keep dependencies patched and avoid unsafe HTML/script injection.
+- Activity changes store version snapshots in `activity_versions` for state-history/audit context.
 
 ---
 
@@ -102,7 +104,7 @@ This design ensures:
 
 ## Known Limitations / Open Items
 
-- No rate-limiting on login attempts (mitigate with a reverse proxy such as nginx with `limit_req`).
+- Login/register rate limiting is in-memory and per app instance; use reverse-proxy or distributed rate limiting for multi-instance production setups.
 - No email verification on registration (suitable for personal/team use; add if multi-tenant).
 - No CSRF protection on API routes (mitigated by Bearer token auth — no cookies used).
 - Activity data is not encrypted at rest (SQLite plaintext). Use OS-level disk encryption if required.

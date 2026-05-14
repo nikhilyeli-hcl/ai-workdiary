@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { withAuth, apiError } from "@/lib/api-helpers";
 import { getDb } from "@/lib/db";
+import { toCsv } from "@/lib/export-utils";
 import type { JWTPayload } from "@/types";
 
 // GET /api/worklogs?logged=0|1&page=1&limit=50
@@ -9,6 +10,7 @@ export const GET = withAuth(
   async (req: NextRequest, payload: JWTPayload): Promise<NextResponse> => {
     const url = new URL(req.url);
     const logged = url.searchParams.get("logged");
+    const format = url.searchParams.get("format");
     const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
     const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));
     const offset = (page - 1) * limit;
@@ -27,6 +29,54 @@ export const GET = withAuth(
       db.prepare(`SELECT COUNT(*) as c FROM worklog_drafts wd WHERE ${where}`)
         .get(...params) as { c: number }
     ).c;
+
+    if (format === "json" || format === "csv") {
+      const rows = db
+        .prepare(
+          `SELECT wd.*, a.title as activity_title, a.occurred_at, a.source
+           FROM worklog_drafts wd
+           JOIN activities a ON a.id = wd.activity_id
+           WHERE ${where}
+           ORDER BY a.occurred_at DESC LIMIT 5000`
+        )
+        .all(...params) as Array<Record<string, unknown>>;
+
+      if (format === "json") {
+        return NextResponse.json(
+          {
+            exported_at: new Date().toISOString(),
+            total: rows.length,
+            drafts: rows,
+          },
+          {
+            headers: {
+              "Content-Disposition": 'attachment; filename="worklogs.json"',
+            },
+          }
+        );
+      }
+
+      const columns = [
+        "id",
+        "activity_id",
+        "ticket_number",
+        "description",
+        "time_spent",
+        "logged",
+        "activity_title",
+        "source",
+        "occurred_at",
+        "created_at",
+        "updated_at",
+      ];
+      return new NextResponse(toCsv(rows, columns), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="worklogs.csv"',
+        },
+      });
+    }
 
     const drafts = db
       .prepare(

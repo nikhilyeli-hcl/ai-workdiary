@@ -27,6 +27,14 @@ interface Props {
   onRefresh: () => void;
 }
 
+interface HistoryEntry {
+  id: string;
+  version: number;
+  action: "created" | "updated" | "deleted";
+  created_at: string;
+  snapshot: Activity;
+}
+
 export default function ActivityList({
   activities,
   total,
@@ -37,6 +45,9 @@ export default function ActivityList({
   const [editing, setEditing] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Activity>>({});
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
+  const [historyOpenFor, setHistoryOpenFor] = useState<string | null>(null);
+  const [histories, setHistories] = useState<Record<string, HistoryEntry[]>>({});
   const [addingManual, setAddingManual] = useState(false);
   const [newEntry, setNewEntry] = useState({
     title: "",
@@ -45,25 +56,77 @@ export default function ActivityList({
     occurred_at: new Date().toISOString().slice(0, 16),
   });
 
-  async function saveEdit(id: string) {
+  async function saveEdit(activity: Activity) {
     setSaving(true);
-    const res = await authFetch(`/api/activities/${id}`, {
+    const res = await authFetch(`/api/activities/${activity.id}`, {
       method: "PATCH",
-      body: JSON.stringify(editValues),
+      body: JSON.stringify({
+        ...editValues,
+        expected_version: editValues.version ?? activity.version,
+      }),
     });
     setSaving(false);
     if (res.ok) {
       setEditing(null);
       onRefresh();
+      return;
+    }
+    if (res.status === 409) {
+      alert("This activity was updated in another session. Reloading latest data.");
+      setEditing(null);
+      onRefresh();
     }
   }
 
-  async function updateStatus(id: string, status: ActivityStatus) {
-    await authFetch(`/api/activities/${id}`, {
+  async function exportActivities(format: "json" | "csv") {
+    setExporting(format);
+    try {
+      const res = await authFetch(`/api/activities?format=${format}`);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `activities.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } catch {
+      alert("Unable to export activities right now.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function toggleHistory(activityId: string) {
+    if (historyOpenFor === activityId) {
+      setHistoryOpenFor(null);
+      return;
+    }
+    if (!histories[activityId]) {
+      const res = await authFetch(`/api/activities/${activityId}/history`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistories((prev) => ({ ...prev, [activityId]: data.history }));
+      }
+    }
+    setHistoryOpenFor(activityId);
+  }
+
+  async function updateStatus(activity: Activity, status: ActivityStatus) {
+    const res = await authFetch(`/api/activities/${activity.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, expected_version: activity.version }),
     });
-    onRefresh();
+    if (res.ok) {
+      onRefresh();
+      return;
+    }
+    if (res.status === 409) {
+      alert("This activity was updated in another session. Reloading latest data.");
+      onRefresh();
+    }
   }
 
   async function createWorklogDraft(activity: Activity) {
@@ -133,13 +196,31 @@ export default function ActivityList({
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           {total} total entr{total === 1 ? "y" : "ies"}
         </p>
-        <button
-          id="add-activity-btn"
-          onClick={() => setAddingManual(true)}
-          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-        >
-          + Add manual entry
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="export-json-btn"
+            onClick={() => void exportActivities("json")}
+            disabled={exporting !== null}
+            className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+          >
+            Export JSON
+          </button>
+          <button
+            id="export-csv-btn"
+            onClick={() => void exportActivities("csv")}
+            disabled={exporting !== null}
+            className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+          >
+            Export CSV
+          </button>
+          <button
+            id="add-activity-btn"
+            onClick={() => setAddingManual(true)}
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+          >
+            + Add manual entry
+          </button>
+        </div>
       </div>
 
       {/* Add manual entry form */}
@@ -269,7 +350,7 @@ export default function ActivityList({
                   </select>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => saveEdit(a.id)}
+                      onClick={() => saveEdit(a)}
                       disabled={saving}
                       className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                     >
@@ -309,15 +390,21 @@ export default function ActivityList({
                       <button
                         onClick={() => {
                           setEditing(a.id);
-                          setEditValues({});
+                          setEditValues({ version: a.version });
                         }}
                         className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                       >
                         Edit
                       </button>
+                      <button
+                        onClick={() => void toggleHistory(a.id)}
+                        className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      >
+                        History
+                      </button>
                       {a.status !== "approved" && (
                         <button
-                          onClick={() => updateStatus(a.id, "approved")}
+                          onClick={() => updateStatus(a, "approved")}
                           className="rounded px-2 py-1 text-xs text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
                         >
                           Approve
@@ -346,6 +433,24 @@ export default function ActivityList({
                   <p className="mt-2 text-xs text-zinc-400">
                     {new Date(a.occurred_at).toLocaleString()}
                   </p>
+                  {historyOpenFor === a.id && (
+                    <div className="mt-3 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3">
+                      <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300 mb-2">
+                        Version history
+                      </p>
+                      <div className="space-y-1">
+                        {(histories[a.id] ?? []).map((entry) => (
+                          <p
+                            key={entry.id}
+                            className="text-xs text-zinc-500 dark:text-zinc-400"
+                          >
+                            v{entry.version} · {entry.action} ·{" "}
+                            {new Date(entry.created_at).toLocaleString()}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

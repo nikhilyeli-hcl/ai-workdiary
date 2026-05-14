@@ -29,8 +29,21 @@ export interface Activity {
   status: ActivityStatus;
   ticket_number: string | null;
   worklog_note: string | null;
+  version: number;
   created_at: string;
   updated_at: string;
+}
+
+export type ActivityHistoryAction = "created" | "updated" | "deleted";
+
+export interface ActivityVersion {
+  id: string;
+  activity_id: string;
+  user_id: string;
+  version: number;
+  action: ActivityHistoryAction;
+  snapshot: string;
+  created_at: string;
 }
 
 export interface WorklogDraft {

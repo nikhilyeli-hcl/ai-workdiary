@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { withAuth, apiError } from "@/lib/api-helpers";
 import { getDb } from "@/lib/db";
-import type { JWTPayload, ActivityStatus, ActivitySource } from "@/types";
+import { recordActivityVersion } from "@/lib/activity-history";
+import { toCsv } from "@/lib/export-utils";
+import type {
+  Activity,
+  JWTPayload,
+  ActivityStatus,
+  ActivitySource,
+} from "@/types";
 
 const VALID_SOURCES: ActivitySource[] = [
   "jira", "bitbucket", "browser", "system", "manual",
@@ -19,6 +26,7 @@ export const GET = withAuth(
     const to = url.searchParams.get("to");
     const status = url.searchParams.get("status");
     const source = url.searchParams.get("source");
+    const format = url.searchParams.get("format");
     const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
     const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));
     const offset = (page - 1) * limit;
@@ -48,6 +56,52 @@ export const GET = withAuth(
     const total = (
       db.prepare(`SELECT COUNT(*) as c FROM activities WHERE ${where}`).get(...params) as { c: number }
     ).c;
+
+    if (format === "json" || format === "csv") {
+      const rows = db
+        .prepare(
+          `SELECT * FROM activities WHERE ${where}
+           ORDER BY occurred_at DESC LIMIT 5000`
+        )
+        .all(...params) as Array<Record<string, unknown>>;
+
+      if (format === "json") {
+        return NextResponse.json(
+          {
+            exported_at: new Date().toISOString(),
+            total: rows.length,
+            activities: rows,
+          },
+          {
+            headers: {
+              "Content-Disposition": 'attachment; filename="activities.json"',
+            },
+          }
+        );
+      }
+
+      const columns = [
+        "id",
+        "source",
+        "occurred_at",
+        "title",
+        "description",
+        "status",
+        "ticket_number",
+        "worklog_note",
+        "version",
+        "created_at",
+        "updated_at",
+      ];
+      const csv = toCsv(rows, columns);
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="activities.csv"',
+        },
+      });
+    }
 
     const activities = db
       .prepare(
@@ -111,7 +165,8 @@ export const POST = withAuth(
 
     const activity = db
       .prepare("SELECT * FROM activities WHERE id = ?")
-      .get(id);
+      .get(id) as Activity;
+    recordActivityVersion(activity, "created");
     return NextResponse.json({ activity }, { status: 201 });
   }
 );

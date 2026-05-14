@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { verifyPassword, createSession } from "@/lib/auth";
 import { apiError } from "@/lib/api-helpers";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const GENERIC_AUTH_ERROR = "Invalid email or password";
 const MAX_DEVICE_LABEL_LENGTH = 80;
@@ -15,6 +16,9 @@ function normalizeDeviceLabel(raw: string | null): string {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const rateLimited = enforceRateLimit(req, "auth:login", 10, 15 * 60 * 1000);
+  if (rateLimited) return rateLimited;
+
   let body: { email?: string; password?: string };
   try {
     body = await req.json();

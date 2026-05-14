@@ -62,6 +62,17 @@ Open [http://localhost:3000](http://localhost:3000).
 
 The first request automatically creates the SQLite schema in `apps/web/data/workdiary.db`.
 
+### Browser Compatibility
+
+The app supports modern browsers including:
+- Atlas
+- Comet
+- Opera
+- Firefox
+- Chrome
+- Edge
+- Safari
+
 ---
 
 ## Production Build

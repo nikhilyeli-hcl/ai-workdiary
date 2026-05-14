@@ -19,6 +19,7 @@ export default function WorklogDraftList() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
   const [filter, setFilter] = useState<"all" | "0" | "1">("0");
 
   const fetchDrafts = useCallback(async () => {
@@ -58,9 +59,31 @@ export default function WorklogDraftList() {
     }
   }
 
+  async function exportDrafts(format: "json" | "csv") {
+    setExporting(format);
+    try {
+      const q = filter === "all" ? "" : `&logged=${filter}`;
+      const res = await authFetch(`/api/worklogs?format=${format}${q}`);
+      if (!res.ok) throw new Error("export failed");
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `worklogs.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } catch {
+      alert("Unable to export worklog drafts right now.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
   return (
     <div id="worklog-list">
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         <span className="text-sm text-zinc-500">Show:</span>
         {(["0", "1", "all"] as const).map((f) => (
           <button
@@ -75,6 +98,20 @@ export default function WorklogDraftList() {
             {f === "0" ? "Pending" : f === "1" ? "Logged" : "All"}
           </button>
         ))}
+        <button
+          onClick={() => void exportDrafts("json")}
+          disabled={exporting !== null}
+          className="ml-auto rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+        >
+          Export JSON
+        </button>
+        <button
+          onClick={() => void exportDrafts("csv")}
+          disabled={exporting !== null}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+        >
+          Export CSV
+        </button>
       </div>
 
       {loading ? (

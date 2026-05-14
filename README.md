@@ -12,6 +12,8 @@ AI Work Diary is a **review-first, not auto-sync** tool. It collects or accepts 
 |---|---|
 | **Multi-device login** | Sign in from any number of devices with one account; manage or revoke sessions from the Sessions tab |
 | **Activity review** | Browse, filter, edit, approve, or skip activity entries by time and source |
+| **Export** | Export activities/worklog drafts as JSON or CSV from the dashboard |
+| **Version history** | Activity edits use optimistic concurrency and keep a state-history trail |
 | **Manual entries** | Add any activity manually with a ticket number and description |
 | **Worklog draft generation** | Approved activities → worklog drafts with ticket number and description |
 | **Onboarding tour** | Intro.js guided tour for first-time users |
@@ -135,6 +137,7 @@ Key points:
 - Token reuse detection: refresh token replay invalidates the session immediately
 - Up to 10 concurrent sessions per account (oldest evicted when cap reached)
 - Revoking a session immediately blocks API access because auth now verifies both JWT and session row status
+- Auth endpoints include basic per-IP rate limiting for login/registration
 
 ---
 
