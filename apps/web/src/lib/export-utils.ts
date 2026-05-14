@@ -1,16 +1,3 @@
-import ExcelJS from "exceljs";
-import {
-  Document,
-  Paragraph,
-  Table,
-  TableRow,
-  TableCell,
-  TextRun,
-  HeadingLevel,
-  WidthType,
-  BorderStyle,
-} from "docx";
-
 // ── CSV ─────────────────────────────────────────────────────────────────────
 
 export function escapeCsvValue(value: unknown): string {
@@ -39,7 +26,8 @@ export async function toExcel(
   rows: Array<Record<string, unknown>>,
   columns: string[],
   sheetName = "Export"
-): Promise<Buffer> {
+): Promise<ArrayBuffer> {
+  const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "AI Work Diary";
   workbook.created = new Date();
@@ -77,34 +65,52 @@ export async function toExcel(
     col.width = Math.min(maxLen + 4, 60);
   });
 
-  return workbook.xlsx.writeBuffer() as Promise<Buffer>;
+  const rawBuf = await workbook.xlsx.writeBuffer();
+  const src = rawBuf as unknown as Uint8Array;
+  const dest = new ArrayBuffer(src.byteLength);
+  new Uint8Array(dest).set(src);
+  return dest;
 }
 
 // ── Word (.docx) ─────────────────────────────────────────────────────────────
-
-const CELL_BORDER = {
-  top: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
-  bottom: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
-  left: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
-  right: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
-};
-
-function makeCell(text: string, bold = false): TableCell {
-  return new TableCell({
-    children: [
-      new Paragraph({
-        children: [new TextRun({ text, bold, size: 18 })],
-      }),
-    ],
-    borders: CELL_BORDER,
-  });
-}
 
 export async function toWord(
   title: string,
   rows: Array<Record<string, unknown>>,
   columns: string[]
-): Promise<Buffer> {
+): Promise<ArrayBuffer> {
+  // All docx types are loaded lazily so this module stays lightweight
+  const {
+    Document,
+    Paragraph,
+    Table,
+    TableRow,
+    TableCell,
+    TextRun,
+    HeadingLevel,
+    WidthType,
+    BorderStyle,
+    Packer,
+  } = await import("docx");
+
+  const CELL_BORDER = {
+    top: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
+    bottom: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
+    left: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
+    right: { style: BorderStyle.SINGLE, size: 1, color: "AAAAAA" },
+  };
+
+  function makeCell(text: string, bold = false) {
+    return new TableCell({
+      children: [
+        new Paragraph({
+          children: [new TextRun({ text, bold, size: 18 })],
+        }),
+      ],
+      borders: CELL_BORDER,
+    });
+  }
+
   const headerRow = new TableRow({
     children: columns.map((col) => makeCell(col, true)),
     tableHeader: true,
@@ -129,10 +135,7 @@ export async function toWord(
     sections: [
       {
         children: [
-          new Paragraph({
-            text: title,
-            heading: HeadingLevel.HEADING_1,
-          }),
+          new Paragraph({ text: title, heading: HeadingLevel.HEADING_1 }),
           new Paragraph({
             children: [
               new TextRun({
@@ -149,6 +152,8 @@ export async function toWord(
     ],
   });
 
-  const { Packer } = await import("docx");
-  return Packer.toBuffer(doc);
+  const nodeBuf = await Packer.toBuffer(doc);
+  const dest = new ArrayBuffer(nodeBuf.byteLength);
+  new Uint8Array(dest).set(nodeBuf);
+  return dest;
 }

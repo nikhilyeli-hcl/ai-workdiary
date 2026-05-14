@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { authFetch, clearTokens } from "@/lib/auth-client";
+import { authFetch, clearTokens, getAccessToken } from "@/lib/auth-client";
 import ActivityList from "@/components/dashboard/ActivityList";
 import WorklogDraftList from "@/components/dashboard/WorklogDraftList";
 import SessionManager from "@/components/dashboard/SessionManager";
@@ -59,7 +59,15 @@ export default function DashboardPage() {
   }
 
   function handleLogout() {
-    authFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    // Fire-and-forget logout: use plain fetch (not authFetch) to avoid the
+    // authFetch 401-redirect side-effect racing against the sign-in flow.
+    const token = getAccessToken();
+    if (token) {
+      fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      }).catch(() => {});
+    }
     clearTokens();
     router.push("/login");
   }

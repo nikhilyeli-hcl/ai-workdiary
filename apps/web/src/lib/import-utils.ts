@@ -2,7 +2,6 @@
  * Server-side import parser helpers.
  * Supports CSV, JSON, and Excel (.xlsx) formats.
  */
-import ExcelJS from "exceljs";
 
 export interface ImportedActivity {
   source: string;
@@ -104,10 +103,14 @@ export function parseActivitiesJson(text: string): ImportResult {
 
 /** Parse Excel (.xlsx) buffer into ImportedActivity rows */
 export async function parseActivitiesExcel(
-  buffer: Buffer
+  buffer: ArrayBuffer | Uint8Array
 ): Promise<ImportResult> {
+  const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  const ab = buffer instanceof ArrayBuffer
+    ? buffer
+    : buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  await workbook.xlsx.load(ab as ArrayBuffer);
   const sheet = workbook.worksheets[0];
   if (!sheet) {
     return {

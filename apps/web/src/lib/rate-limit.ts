@@ -16,6 +16,10 @@ export function enforceRateLimit(
   maxRequests: number,
   windowMs: number
 ): NextResponse | null {
+  // Rate limiting only applies in production to avoid interfering with
+  // development reloads or test suites that share a server process.
+  if (process.env.NODE_ENV !== "production") return null;
+
   const now = Date.now();
   const ip = getClientIp(req);
   const bucketKey = `${key}:${ip}`;

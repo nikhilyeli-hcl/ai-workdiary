@@ -30,16 +30,19 @@ export const POST = withAuth(
     const fileName =
       "name" in file ? String((file as File).name).toLowerCase() : "upload";
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
 
     let parseResult;
     if (fileName.endsWith(".xlsx")) {
-      parseResult = await parseActivitiesExcel(buffer);
+      parseResult = await parseActivitiesExcel(arrayBuffer);
     } else if (fileName.endsWith(".json")) {
-      parseResult = parseActivitiesJson(buffer.toString("utf-8"));
+      parseResult = parseActivitiesJson(
+        new TextDecoder().decode(arrayBuffer)
+      );
     } else {
       // Default: treat as CSV (also handles .csv)
-      parseResult = parseActivitiesCsv(buffer.toString("utf-8"));
+      parseResult = parseActivitiesCsv(
+        new TextDecoder().decode(arrayBuffer)
+      );
     }
 
     const { activities: parsed, errors } = parseResult;
