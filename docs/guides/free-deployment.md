@@ -205,6 +205,20 @@ fly secrets set JWT_SECRET="your-strong-secret"
 
 ---
 
+## Automate backend deploys with GitHub Actions
+
+This repository includes `.github/workflows/backend-deploy.yml` to automate backend deploys.
+
+It does two things on every push to `main` (or manual run):
+1. Runs `npm run test` and `npm run build`
+2. Triggers your backend host deploy webhook
+
+Set repository secrets:
+- `BACKEND_DEPLOY_HOOK_URL` (required): deploy webhook URL from Railway/Render/Fly/etc.
+- `BACKEND_DEPLOY_HOOK_TOKEN` (optional): bearer token sent as `Authorization: Bearer ...`
+
+---
+
 ## Choosing the right option
 
 | Goal | Best Option |

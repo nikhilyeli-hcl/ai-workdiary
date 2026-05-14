@@ -155,6 +155,9 @@ Key points:
 
 - **CI** workflow runs lint, tests, and build on push/PR to `main`.
 - **Playwright E2E** workflow runs browser tests on push/PR to `main`.
-- **Deploy Docs to Pages** publishes the `docs/` folder to GitHub Pages.
+- **Deploy Frontend Docs to Pages** publishes the `docs/` folder to GitHub Pages.
   - GitHub Pages hosts docs/static content only.
   - The full Next.js app is not suitable for Pages because API routes + SQLite require a server runtime.
+- **Deploy Backend with GitHub Actions** verifies tests/build, then triggers a deploy hook.
+  - Configure repository secret `BACKEND_DEPLOY_HOOK_URL` with your backend host deploy webhook URL.
+  - Optional: set `BACKEND_DEPLOY_HOOK_TOKEN` if your endpoint expects a bearer token.
