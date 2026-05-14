@@ -47,7 +47,10 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    void fetchActivities();
+    const id = window.setTimeout(() => {
+      void fetchActivities();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [fetchActivities]);
 
   function refreshActivities() {

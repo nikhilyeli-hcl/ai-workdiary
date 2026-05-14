@@ -21,7 +21,7 @@ function generateDeviceLabel(): string {
     : ua.includes("iPhone") || ua.includes("iPad")
     ? "iOS"
     : "Unknown";
-  return `${platform} – ${new Date().toLocaleDateString()}`;
+  return `${platform} - ${new Date().toLocaleDateString()}`;
 }
 
 export function getDeviceLabel(): string {
@@ -132,7 +132,7 @@ export async function authFetch(
     token = refreshed;
   }
 
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers: {
       ...(options.headers ?? {}),
@@ -140,4 +140,12 @@ export async function authFetch(
       "Content-Type": "application/json",
     },
   });
+
+  if (response.status === 401) {
+    clearTokens();
+    window.location.assign("/login");
+    throw new Error("Unauthorized");
+  }
+
+  return response;
 }

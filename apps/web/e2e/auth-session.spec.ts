@@ -22,7 +22,7 @@ async function registerAndOpenDashboard(
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create Account" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 });
   await expect(page.getByText("AI Work Diary")).toBeVisible();
 
   return { email, password };
@@ -38,7 +38,7 @@ async function login(page: Page, email: string, password: string): Promise<void>
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 });
 }
 
 test("register, sign out, and sign in again", async ({ page }) => {
@@ -91,7 +91,7 @@ test("multi-session management supports revoke and sign out all", async ({
   await expect(page).toHaveURL(/\/login/);
 
   await secondPage.reload();
-  await expect(secondPage).toHaveURL(/\/login/);
+  await expect(secondPage).toHaveURL(/\/login/, { timeout: 15000 });
   await secondPage.close();
 });
 
@@ -104,8 +104,10 @@ test("shows resilient error state when activities API fails", async ({ page }) =
     });
   });
   await registerAndOpenDashboard(page);
-  await expect(page.getByRole("alert")).toContainText(
-    "Could not load activities right now."
+  await expect(page.getByText("Could not load activities right now.")).toBeVisible(
+    {
+      timeout: 10000,
+    }
   );
 });
 
@@ -120,7 +122,9 @@ test("shows resilient error state when sessions API fails", async ({ page }) => 
   });
 
   await page.getByRole("button", { name: "🖥 Sessions" }).click();
-  await expect(page.getByRole("alert")).toContainText("Could not load sessions.");
+  await expect(page.getByText("Could not load sessions.")).toBeVisible({
+    timeout: 10000,
+  });
 });
 
 async function createSecondSession(

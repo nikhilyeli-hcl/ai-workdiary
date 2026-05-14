@@ -12,8 +12,13 @@ export const GET = withAuth(
   async (_req: NextRequest, payload: JWTPayload): Promise<NextResponse> => {
     const sessions = getActiveSessions(payload.sub);
     // Never expose refresh token hashes to the client
-    const safe = sessions.map(({ refresh_token_hash: _, ...s }) => ({
-      ...s,
+    const safe = sessions.map((s) => ({
+      id: s.id,
+      user_id: s.user_id,
+      device_label: s.device_label,
+      created_at: s.created_at,
+      last_used_at: s.last_used_at,
+      expires_at: s.expires_at,
       is_current: s.id === payload.session_id,
     }));
     return NextResponse.json({ sessions: safe });

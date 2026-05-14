@@ -40,7 +40,10 @@ export default function WorklogDraftList() {
   }, [filter]);
 
   useEffect(() => {
-    void fetchDrafts();
+    const id = window.setTimeout(() => {
+      void fetchDrafts();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [fetchDrafts]);
 
   async function markLogged(id: string) {
