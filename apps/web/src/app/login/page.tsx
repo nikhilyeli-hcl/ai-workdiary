@@ -33,7 +33,7 @@ export default function LoginPage() {
       return;
     }
 
-    saveTokens(data.tokens, data.tokens.session_id ?? "");
+    saveTokens(data.tokens, data.session_id ?? "");
     router.push("/dashboard");
   }
 

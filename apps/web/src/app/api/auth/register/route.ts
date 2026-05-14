@@ -45,7 +45,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const deviceLabel =
     req.headers.get("x-device-label") || "Unknown Device";
-  const { tokens } = await createSession(userId, deviceLabel);
+  const { session, tokens } = await createSession(userId, deviceLabel);
 
-  return NextResponse.json({ tokens }, { status: 201 });
+  return NextResponse.json({ tokens, session_id: session.id }, { status: 201 });
 }
