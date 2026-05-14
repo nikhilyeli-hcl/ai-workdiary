@@ -15,19 +15,30 @@ interface SessionInfo {
 export default function SessionManager() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
-    setLoading(true);
-    const res = await authFetch("/api/sessions");
-    if (res.ok) {
-      const data = await res.json();
-      setSessions(data.sessions);
+    try {
+      const res = await authFetch("/api/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data.sessions);
+        setError(null);
+      } else {
+        setError("Could not load sessions.");
+      }
+    } catch {
+      setError("Could not load sessions.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchSessions();
+    const id = window.setTimeout(() => {
+      void fetchSessions();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [fetchSessions]);
 
   async function revokeSession(id: string, isCurrent: boolean) {
@@ -36,9 +47,10 @@ export default function SessionManager() {
       : "Revoke this session?";
     if (!confirm(msg)) return;
     await authFetch(`/api/sessions?id=${id}`, { method: "DELETE" });
-    fetchSessions();
+    setLoading(true);
+    void fetchSessions();
     if (isCurrent) {
-      window.location.href = "/login";
+      window.location.assign("/login");
     }
   }
 
@@ -65,6 +77,22 @@ export default function SessionManager() {
       {loading ? (
         <div className="text-center py-20 text-zinc-400">
           Loading sessions…
+        </div>
+      ) : error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-300"
+        >
+          <p>{error}</p>
+          <button
+            onClick={() => {
+              setLoading(true);
+              void fetchSessions();
+            }}
+            className="mt-3 rounded-lg border border-red-300 dark:border-red-700 px-3 py-1.5 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/40"
+          >
+            Retry
+          </button>
         </div>
       ) : (
         <div className="space-y-3">

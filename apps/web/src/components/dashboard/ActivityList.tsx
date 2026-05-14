@@ -23,18 +23,34 @@ interface Props {
   activities: Activity[];
   total: number;
   loading: boolean;
+  error?: string | null;
   onRefresh: () => void;
+}
+
+interface HistoryEntry {
+  id: string;
+  version: number;
+  action: "created" | "updated" | "deleted";
+  created_at: string;
+  snapshot: Activity;
 }
 
 export default function ActivityList({
   activities,
   total,
   loading,
+  error,
   onRefresh,
 }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Activity>>({});
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState<"json" | "csv" | "xlsx" | "docx" | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; errors: { row: number; message: string }[] } | null>(null);
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [historyOpenFor, setHistoryOpenFor] = useState<string | null>(null);
+  const [histories, setHistories] = useState<Record<string, HistoryEntry[]>>({});
   const [addingManual, setAddingManual] = useState(false);
   const [newEntry, setNewEntry] = useState({
     title: "",
@@ -43,25 +59,118 @@ export default function ActivityList({
     occurred_at: new Date().toISOString().slice(0, 16),
   });
 
-  async function saveEdit(id: string) {
+  async function saveEdit(activity: Activity) {
     setSaving(true);
-    const res = await authFetch(`/api/activities/${id}`, {
+    const res = await authFetch(`/api/activities/${activity.id}`, {
       method: "PATCH",
-      body: JSON.stringify(editValues),
+      body: JSON.stringify({
+        ...editValues,
+        expected_version: editValues.version ?? activity.version,
+      }),
     });
     setSaving(false);
     if (res.ok) {
       setEditing(null);
       onRefresh();
+      return;
+    }
+    if (res.status === 409) {
+      alert("This activity was updated in another session. Reloading latest data.");
+      setEditing(null);
+      onRefresh();
     }
   }
 
-  async function updateStatus(id: string, status: ActivityStatus) {
-    await authFetch(`/api/activities/${id}`, {
+  async function exportActivities(format: "json" | "csv" | "xlsx" | "docx") {
+    setExporting(format);
+    try {
+      const res = await authFetch(`/api/activities?format=${format}`);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `activities.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } catch {
+      alert("Unable to export activities right now.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function downloadTemplate(format: "csv" | "xlsx") {
+    try {
+      const res = await authFetch(`/api/activities/import?format=${format}`);
+      if (!res.ok) throw new Error("Template download failed");
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `activities-import-template.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } catch {
+      alert("Unable to download import template.");
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await authFetch("/api/activities/import", {
+        method: "POST",
+        body,
+      });
+      const data = await res.json();
+      setImportResult({ imported: data.imported ?? 0, errors: data.errors ?? [] });
+      if (data.imported > 0) onRefresh();
+    } catch {
+      setImportResult({ imported: 0, errors: [{ row: 0, message: "Upload failed" }] });
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  }
+
+  async function toggleHistory(activityId: string) {
+    if (historyOpenFor === activityId) {
+      setHistoryOpenFor(null);
+      return;
+    }
+    if (!histories[activityId]) {
+      const res = await authFetch(`/api/activities/${activityId}/history`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistories((prev) => ({ ...prev, [activityId]: data.history }));
+      }
+    }
+    setHistoryOpenFor(activityId);
+  }
+
+  async function updateStatus(activity: Activity, status: ActivityStatus) {
+    const res = await authFetch(`/api/activities/${activity.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, expected_version: activity.version }),
     });
-    onRefresh();
+    if (res.ok) {
+      onRefresh();
+      return;
+    }
+    if (res.status === 409) {
+      alert("This activity was updated in another session. Reloading latest data.");
+      onRefresh();
+    }
   }
 
   async function createWorklogDraft(activity: Activity) {
@@ -107,13 +216,52 @@ export default function ActivityList({
     );
   }
 
+  if (error) {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-300"
+      >
+        <p>{error}</p>
+        <button
+          onClick={onRefresh}
+          className="mt-3 rounded-lg border border-red-300 dark:border-red-700 px-3 py-1.5 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/40"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div id="activity-list">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mr-auto">
           {total} total entr{total === 1 ? "y" : "ies"}
         </p>
+        {/* Export group */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-xs text-zinc-400 mr-1">Export:</span>
+          {(["json", "csv", "xlsx", "docx"] as const).map((fmt) => (
+            <button
+              key={fmt}
+              id={`export-${fmt}-btn`}
+              onClick={() => void exportActivities(fmt)}
+              disabled={exporting !== null}
+              className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-2.5 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+            >
+              {fmt.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {/* Import button */}
+        <button
+          onClick={() => { setShowImportPanel((v) => !v); setImportResult(null); }}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
+        >
+          📂 Import
+        </button>
         <button
           id="add-activity-btn"
           onClick={() => setAddingManual(true)}
@@ -122,6 +270,69 @@ export default function ActivityList({
           + Add manual entry
         </button>
       </div>
+
+      {/* Import panel */}
+      {showImportPanel && (
+        <div className="mb-4 rounded-xl bg-white dark:bg-zinc-800 shadow p-4 space-y-3">
+          <h3 className="font-semibold text-zinc-800 dark:text-zinc-200">
+            Import Activities
+          </h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Supported formats: <strong>.csv</strong>, <strong>.json</strong>, <strong>.xlsx</strong>.
+            Download a template to see the required columns.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => void downloadTemplate("csv")}
+              className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-2.5 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
+            >
+              ⬇ CSV Template
+            </button>
+            <button
+              onClick={() => void downloadTemplate("xlsx")}
+              className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-2.5 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
+            >
+              ⬇ Excel Template
+            </button>
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-500">Choose file to import:</span>
+            <input
+              type="file"
+              accept=".csv,.json,.xlsx"
+              disabled={importing}
+              onChange={handleImportFile}
+              className="text-sm text-zinc-700 dark:text-zinc-300 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-blue-700"
+            />
+          </label>
+          {importing && (
+            <p className="text-xs text-zinc-400">Importing…</p>
+          )}
+          {importResult && (
+            <div className={`rounded-lg p-3 text-xs ${importResult.imported > 0 ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"}`}>
+              {importResult.imported > 0 && (
+                <p>✓ Imported {importResult.imported} activit{importResult.imported === 1 ? "y" : "ies"}.</p>
+              )}
+              {importResult.errors.length > 0 && (
+                <div className="mt-1">
+                  <p className="font-semibold">Skipped rows:</p>
+                  <ul className="list-disc list-inside space-y-0.5 mt-0.5">
+                    {importResult.errors.map((e, i) => (
+                      <li key={i}>Row {e.row}: {e.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          <button
+            onClick={() => setShowImportPanel(false)}
+            className="text-xs text-zinc-400 hover:text-zinc-600"
+          >
+            Close
+          </button>
+        </div>
+      )}
 
       {/* Add manual entry form */}
       {addingManual && (
@@ -250,7 +461,7 @@ export default function ActivityList({
                   </select>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => saveEdit(a.id)}
+                      onClick={() => saveEdit(a)}
                       disabled={saving}
                       className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                     >
@@ -290,15 +501,21 @@ export default function ActivityList({
                       <button
                         onClick={() => {
                           setEditing(a.id);
-                          setEditValues({});
+                          setEditValues({ version: a.version });
                         }}
                         className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                       >
                         Edit
                       </button>
+                      <button
+                        onClick={() => void toggleHistory(a.id)}
+                        className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      >
+                        History
+                      </button>
                       {a.status !== "approved" && (
                         <button
-                          onClick={() => updateStatus(a.id, "approved")}
+                          onClick={() => updateStatus(a, "approved")}
                           className="rounded px-2 py-1 text-xs text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
                         >
                           Approve
@@ -327,6 +544,24 @@ export default function ActivityList({
                   <p className="mt-2 text-xs text-zinc-400">
                     {new Date(a.occurred_at).toLocaleString()}
                   </p>
+                  {historyOpenFor === a.id && (
+                    <div className="mt-3 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3">
+                      <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300 mb-2">
+                        Version history
+                      </p>
+                      <div className="space-y-1">
+                        {(histories[a.id] ?? []).map((entry) => (
+                          <p
+                            key={entry.id}
+                            className="text-xs text-zinc-500 dark:text-zinc-400"
+                          >
+                            v{entry.version} · {entry.action} ·{" "}
+                            {new Date(entry.created_at).toLocaleString()}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

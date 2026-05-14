@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth, apiError } from "@/lib/api-helpers";
+import { withAuth } from "@/lib/api-helpers";
 import { revokeSession } from "@/lib/auth";
 import type { JWTPayload } from "@/types";
 

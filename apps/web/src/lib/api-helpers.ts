@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAccessToken } from "@/lib/auth";
+import { isSessionActive, verifyAccessToken } from "@/lib/auth";
 import type { JWTPayload } from "@/types";
 
 export type AuthedRequest = NextRequest & { auth: JWTPayload };
@@ -37,6 +37,12 @@ export function withAuth(
     if (!payload) {
       return NextResponse.json(
         { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+    if (!isSessionActive(payload.session_id, payload.sub)) {
+      return NextResponse.json(
+        { error: "Session revoked or expired" },
         { status: 401 }
       );
     }

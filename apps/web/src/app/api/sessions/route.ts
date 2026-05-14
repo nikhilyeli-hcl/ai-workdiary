@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth, apiError } from "@/lib/api-helpers";
-import { getActiveSessions, revokeSession, revokeAllUserSessions } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import {
+  getActiveSessions,
+  revokeSessionForUser,
+  revokeAllUserSessions,
+} from "@/lib/auth";
 import type { JWTPayload } from "@/types";
 
 // GET /api/sessions – list active sessions for the current user
@@ -9,8 +12,13 @@ export const GET = withAuth(
   async (_req: NextRequest, payload: JWTPayload): Promise<NextResponse> => {
     const sessions = getActiveSessions(payload.sub);
     // Never expose refresh token hashes to the client
-    const safe = sessions.map(({ refresh_token_hash: _rth, ...s }) => ({
-      ...s,
+    const safe = sessions.map((s) => ({
+      id: s.id,
+      user_id: s.user_id,
+      device_label: s.device_label,
+      created_at: s.created_at,
+      last_used_at: s.last_used_at,
+      expires_at: s.expires_at,
       is_current: s.id === payload.session_id,
     }));
     return NextResponse.json({ sessions: safe });
@@ -34,16 +42,9 @@ export const DELETE = withAuth(
       return apiError("Provide ?id=<sessionId> or ?all=1");
     }
 
-    // Verify the session belongs to this user
-    const db = getDb();
-    const session = db
-      .prepare("SELECT id FROM sessions WHERE id = ? AND user_id = ?")
-      .get(targetId, payload.sub);
-    if (!session) {
+    if (!revokeSessionForUser(targetId, payload.sub)) {
       return apiError("Session not found", 404);
     }
-
-    revokeSession(targetId);
     return NextResponse.json({ message: "Session revoked" });
   }
 );
