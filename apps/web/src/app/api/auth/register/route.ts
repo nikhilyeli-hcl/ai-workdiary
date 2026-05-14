@@ -6,6 +6,15 @@ import { apiError } from "@/lib/api-helpers";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LEN = 10;
+const MAX_DEVICE_LABEL_LENGTH = 80;
+
+function normalizeDeviceLabel(raw: string | null): string {
+  const cleaned = (raw ?? "")
+    .replace(/[^\w .\-()]/g, "")
+    .trim()
+    .slice(0, MAX_DEVICE_LABEL_LENGTH);
+  return cleaned || "Unknown Device";
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: { email?: string; name?: string; password?: string };
@@ -43,8 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     "INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)"
   ).run(userId, email.toLowerCase(), name.trim(), passwordHash);
 
-  const deviceLabel =
-    req.headers.get("x-device-label") || "Unknown Device";
+  const deviceLabel = normalizeDeviceLabel(req.headers.get("x-device-label"));
   const { session, tokens } = await createSession(userId, deviceLabel);
 
   return NextResponse.json({ tokens, session_id: session.id }, { status: 201 });

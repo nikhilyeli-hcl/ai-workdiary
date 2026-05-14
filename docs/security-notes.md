@@ -33,6 +33,8 @@ AI Work Diary is designed to run safely on enterprise machines where the user **
 - The `data/` directory is excluded from git via `.gitignore`.
 - No data is sent to any external service by this application.
 - Backups are the user's responsibility.
+- Browser `localStorage` is used only for client auth/session tokens (`wd_access_token`, `wd_refresh_token`, `wd_session_id`, `wd_device_label`).
+- Because tokens are in `localStorage`, XSS in the same origin would increase token exposure risk; keep dependencies patched and avoid unsafe HTML/script injection.
 
 ---
 
@@ -104,3 +106,4 @@ This design ensures:
 - No email verification on registration (suitable for personal/team use; add if multi-tenant).
 - No CSRF protection on API routes (mitigated by Bearer token auth — no cookies used).
 - Activity data is not encrypted at rest (SQLite plaintext). Use OS-level disk encryption if required.
+- Overlapping refresh attempts from multiple devices/tabs can still race; in-tab refresh is coalesced and server validation adds a short grace window before replay-triggered revocation.

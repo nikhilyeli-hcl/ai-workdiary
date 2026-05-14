@@ -88,6 +88,14 @@ npm run test               # run all tests once
 npm run test:watch         # watch mode (from apps/web)
 ```
 
+### Playwright E2E
+
+```bash
+cd apps/web
+npm run playwright:install
+npm run test:e2e
+```
+
 Tests run against an in-memory SQLite database — no `data/` directory or environment variables needed.
 
 ---
@@ -105,3 +113,15 @@ Tests run against an in-memory SQLite database — no `data/` directory or envir
 ## Stopping the Server
 
 Press `Ctrl+C` in the terminal where `npm run dev` or `npm start` is running.
+
+---
+
+## GitHub Actions and Pages
+
+- CI workflow: `.github/workflows/ci.yml`
+- Playwright E2E workflow: `.github/workflows/playwright.yml`
+- Docs Pages deployment: `.github/workflows/pages.yml`
+
+Recommended branch protection required checks:
+- `CI / Lint, test, build`
+- `Playwright E2E / E2E tests`

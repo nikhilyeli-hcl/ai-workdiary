@@ -111,6 +111,14 @@ cd apps/web
 npm test
 ```
 
+## Running Playwright E2E
+
+```bash
+cd apps/web
+npm run playwright:install
+npm run test:e2e
+```
+
 ---
 
 ## Security Notes
@@ -121,10 +129,12 @@ Key points:
 - No admin rights required
 - No background processes or privileged OS access
 - SQLite database stored in `apps/web/data/` — **never commit this directory**
+- Browser `localStorage` stores auth/session client tokens only (access token, refresh token, session id, device label), not activity/worklog tables
 - Passwords hashed with bcrypt (12 rounds)
 - JWT tokens short-lived (15 min); refresh tokens rotated on each use
 - Token reuse detection: refresh token replay invalidates the session immediately
 - Up to 10 concurrent sessions per account (oldest evicted when cap reached)
+- Revoking a session immediately blocks API access because auth now verifies both JWT and session row status
 
 ---
 
@@ -136,3 +146,12 @@ Key points:
 | [User Guide](docs/user-guide.md) | Step-by-step end-user guide |
 | [Security Notes](docs/security-notes.md) | Enterprise security and compliance guide |
 
+---
+
+## GitHub Automation
+
+- **CI** workflow runs lint, tests, and build on push/PR to `main`.
+- **Playwright E2E** workflow runs browser tests on push/PR to `main`.
+- **Deploy Docs to Pages** publishes the `docs/` folder to GitHub Pages.
+  - GitHub Pages hosts docs/static content only.
+  - The full Next.js app is not suitable for Pages because API routes + SQLite require a server runtime.

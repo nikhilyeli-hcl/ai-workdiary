@@ -6,6 +6,7 @@ const ACCESS_KEY = "wd_access_token";
 const REFRESH_KEY = "wd_refresh_token";
 const SESSION_KEY = "wd_session_id";
 const DEVICE_KEY = "wd_device_label";
+let activeRefreshPromise: Promise<string | null> | null = null;
 
 function generateDeviceLabel(): string {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "Unknown";
@@ -79,6 +80,9 @@ export function isTokenExpiredSoon(accessToken: string): boolean {
 }
 
 export async function refreshAccessToken(): Promise<string | null> {
+  if (activeRefreshPromise) return activeRefreshPromise;
+
+  activeRefreshPromise = (async () => {
   const refreshToken = getRefreshToken();
   const sessionId = getSessionId();
   if (!refreshToken || !sessionId) return null;
@@ -97,6 +101,13 @@ export async function refreshAccessToken(): Promise<string | null> {
   const { tokens } = await res.json();
   saveTokens(tokens, sessionId);
   return tokens.accessToken;
+  })();
+
+  try {
+    return await activeRefreshPromise;
+  } finally {
+    activeRefreshPromise = null;
+  }
 }
 
 /** Authenticated fetch – auto-refreshes token if near expiry */
@@ -108,14 +119,14 @@ export async function authFetch(
 
   if (!token) {
     clearTokens();
-    window.location.href = "/login";
+    window.location.assign("/login");
     throw new Error("Not authenticated");
   }
 
   if (isTokenExpiredSoon(token)) {
     const refreshed = await refreshAccessToken();
     if (!refreshed) {
-      window.location.href = "/login";
+      window.location.assign("/login");
       throw new Error("Session expired");
     }
     token = refreshed;

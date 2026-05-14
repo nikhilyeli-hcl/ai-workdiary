@@ -23,28 +23,37 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [totalActivities, setTotalActivities] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [showTour, setShowTour] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showTour, setShowTour] = useState(
+    typeof window !== "undefined" && !localStorage.getItem("wd_toured")
+  );
 
   const fetchActivities = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await authFetch("/api/activities?limit=50");
       if (res.ok) {
         const data = await res.json();
         setActivities(data.activities);
         setTotalActivities(data.pagination.total);
+        setError(null);
+      } else {
+        setError("Could not load activities right now.");
       }
+    } catch {
+      setError("Could not load activities right now.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchActivities();
-    // Show tour for first-time visitors
-    const toured = localStorage.getItem("wd_toured");
-    if (!toured) setShowTour(true);
+    void fetchActivities();
   }, [fetchActivities]);
+
+  function refreshActivities() {
+    setLoading(true);
+    void fetchActivities();
+  }
 
   function handleLogout() {
     authFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
@@ -124,7 +133,8 @@ export default function DashboardPage() {
             activities={activities}
             total={totalActivities}
             loading={loading}
-            onRefresh={fetchActivities}
+            error={error}
+            onRefresh={refreshActivities}
           />
         )}
         {tab === "worklogs" && <WorklogDraftList />}

@@ -18,21 +18,29 @@ interface Draft {
 export default function WorklogDraftList() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "0" | "1">("0");
 
   const fetchDrafts = useCallback(async () => {
-    setLoading(true);
     const q = filter === "all" ? "" : `?logged=${filter}`;
-    const res = await authFetch(`/api/worklogs${q}`);
-    if (res.ok) {
-      const data = await res.json();
-      setDrafts(data.drafts);
+    try {
+      const res = await authFetch(`/api/worklogs${q}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDrafts(data.drafts);
+        setError(null);
+      } else {
+        setError("Could not load worklog drafts.");
+      }
+    } catch {
+      setError("Could not load worklog drafts.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [filter]);
 
   useEffect(() => {
-    fetchDrafts();
+    void fetchDrafts();
   }, [fetchDrafts]);
 
   async function markLogged(id: string) {
@@ -41,7 +49,10 @@ export default function WorklogDraftList() {
     );
     if (!confirmed) return;
     const res = await authFetch(`/api/worklogs?id=${id}`, { method: "PATCH" });
-    if (res.ok) fetchDrafts();
+    if (res.ok) {
+      setLoading(true);
+      void fetchDrafts();
+    }
   }
 
   return (
@@ -65,6 +76,22 @@ export default function WorklogDraftList() {
 
       {loading ? (
         <div className="text-center py-20 text-zinc-400">Loading drafts…</div>
+      ) : error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-300"
+        >
+          <p>{error}</p>
+          <button
+            onClick={() => {
+              setLoading(true);
+              void fetchDrafts();
+            }}
+            className="mt-3 rounded-lg border border-red-300 dark:border-red-700 px-3 py-1.5 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/40"
+          >
+            Retry
+          </button>
+        </div>
       ) : drafts.length === 0 ? (
         <div className="text-center py-20 text-zinc-400">
           <p className="text-4xl mb-3">📝</p>
@@ -128,7 +155,7 @@ export default function WorklogDraftList() {
         <strong>⚠️ Important:</strong> AI Work Diary is an orchestrator and
         reviewer — it does not automatically submit worklogs. After reviewing
         these drafts, manually enter them into Atlassian Worklog Pro and click
-        "Mark logged" to confirm.
+        &quot;Mark logged&quot; to confirm.
       </div>
     </div>
   );

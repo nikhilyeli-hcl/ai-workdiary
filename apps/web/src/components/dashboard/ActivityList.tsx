@@ -23,6 +23,7 @@ interface Props {
   activities: Activity[];
   total: number;
   loading: boolean;
+  error?: string | null;
   onRefresh: () => void;
 }
 
@@ -30,6 +31,7 @@ export default function ActivityList({
   activities,
   total,
   loading,
+  error,
   onRefresh,
 }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -103,6 +105,23 @@ export default function ActivityList({
     return (
       <div className="flex items-center justify-center py-20 text-zinc-400">
         Loading activities…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-300"
+      >
+        <p>{error}</p>
+        <button
+          onClick={onRefresh}
+          className="mt-3 rounded-lg border border-red-300 dark:border-red-700 px-3 py-1.5 text-xs font-medium hover:bg-red-100 dark:hover:bg-red-900/40"
+        >
+          Retry
+        </button>
       </div>
     );
   }

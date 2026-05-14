@@ -4,6 +4,15 @@ import { verifyPassword, createSession } from "@/lib/auth";
 import { apiError } from "@/lib/api-helpers";
 
 const GENERIC_AUTH_ERROR = "Invalid email or password";
+const MAX_DEVICE_LABEL_LENGTH = 80;
+
+function normalizeDeviceLabel(raw: string | null): string {
+  const cleaned = (raw ?? "")
+    .replace(/[^\w .\-()]/g, "")
+    .trim()
+    .slice(0, MAX_DEVICE_LABEL_LENGTH);
+  return cleaned || "Unknown Device";
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: { email?: string; password?: string };
@@ -35,8 +44,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return apiError(GENERIC_AUTH_ERROR, 401);
   }
 
-  const deviceLabel =
-    req.headers.get("x-device-label") || "Unknown Device";
+  const deviceLabel = normalizeDeviceLabel(req.headers.get("x-device-label"));
   const { session, tokens } = await createSession(user.id, deviceLabel);
 
   return NextResponse.json({ tokens, session_id: session.id });
