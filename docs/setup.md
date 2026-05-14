@@ -131,7 +131,8 @@ Press `Ctrl+C` in the terminal where `npm run dev` or `npm start` is running.
 
 - CI workflow: `.github/workflows/ci.yml`
 - Playwright E2E workflow: `.github/workflows/playwright.yml`
-- Docs Pages deployment: `.github/workflows/pages.yml`
+- Frontend docs Pages deployment: `.github/workflows/pages.yml`
+- Backend deployment trigger workflow: `.github/workflows/backend-deploy.yml`
 
 Recommended branch protection required checks:
 - `CI / Lint, test, build`

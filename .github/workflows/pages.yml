@@ -1,4 +1,4 @@
-name: Deploy Docs to Pages
+name: Deploy Frontend Docs to Pages
 
 on:
   push:
