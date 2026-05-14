@@ -19,7 +19,7 @@ export default function WorklogDraftList() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
+  const [exporting, setExporting] = useState<"json" | "csv" | "xlsx" | "docx" | null>(null);
   const [filter, setFilter] = useState<"all" | "0" | "1">("0");
 
   const fetchDrafts = useCallback(async () => {
@@ -59,7 +59,7 @@ export default function WorklogDraftList() {
     }
   }
 
-  async function exportDrafts(format: "json" | "csv") {
+  async function exportDrafts(format: "json" | "csv" | "xlsx" | "docx") {
     setExporting(format);
     try {
       const q = filter === "all" ? "" : `&logged=${filter}`;
@@ -111,6 +111,20 @@ export default function WorklogDraftList() {
           className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
         >
           Export CSV
+        </button>
+        <button
+          onClick={() => void exportDrafts("xlsx")}
+          disabled={exporting !== null}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+        >
+          Export Excel
+        </button>
+        <button
+          onClick={() => void exportDrafts("docx")}
+          disabled={exporting !== null}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+        >
+          Export Word
         </button>
       </div>
 

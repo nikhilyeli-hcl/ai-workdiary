@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { withAuth, apiError } from "@/lib/api-helpers";
 import { getDb } from "@/lib/db";
 import { recordActivityVersion } from "@/lib/activity-history";
-import { toCsv } from "@/lib/export-utils";
+import { toCsv, toExcel, toWord } from "@/lib/export-utils";
 import type {
   Activity,
   JWTPayload,
@@ -57,7 +57,7 @@ export const GET = withAuth(
       db.prepare(`SELECT COUNT(*) as c FROM activities WHERE ${where}`).get(...params) as { c: number }
     ).c;
 
-    if (format === "json" || format === "csv") {
+    if (format === "json" || format === "csv" || format === "xlsx" || format === "docx") {
       const rows = db
         .prepare(
           `SELECT * FROM activities WHERE ${where}
@@ -93,12 +93,38 @@ export const GET = withAuth(
         "created_at",
         "updated_at",
       ];
-      const csv = toCsv(rows, columns);
-      return new NextResponse(csv, {
+
+      if (format === "csv") {
+        const csv = toCsv(rows, columns);
+        return new NextResponse(csv, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": 'attachment; filename="activities.csv"',
+          },
+        });
+      }
+
+      if (format === "xlsx") {
+        const buf = await toExcel(rows, columns, "Activities");
+        return new NextResponse(buf, {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": 'attachment; filename="activities.xlsx"',
+          },
+        });
+      }
+
+      // format === "docx"
+      const buf = await toWord("Activities Export", rows, columns);
+      return new NextResponse(buf, {
         status: 200,
         headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": 'attachment; filename="activities.csv"',
+          "Content-Type":
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "Content-Disposition": 'attachment; filename="activities.docx"',
         },
       });
     }

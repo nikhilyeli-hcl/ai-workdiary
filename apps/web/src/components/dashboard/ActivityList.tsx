@@ -45,7 +45,10 @@ export default function ActivityList({
   const [editing, setEditing] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Activity>>({});
   const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
+  const [exporting, setExporting] = useState<"json" | "csv" | "xlsx" | "docx" | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; errors: { row: number; message: string }[] } | null>(null);
+  const [showImportPanel, setShowImportPanel] = useState(false);
   const [historyOpenFor, setHistoryOpenFor] = useState<string | null>(null);
   const [histories, setHistories] = useState<Record<string, HistoryEntry[]>>({});
   const [addingManual, setAddingManual] = useState(false);
@@ -78,7 +81,7 @@ export default function ActivityList({
     }
   }
 
-  async function exportActivities(format: "json" | "csv") {
+  async function exportActivities(format: "json" | "csv" | "xlsx" | "docx") {
     setExporting(format);
     try {
       const res = await authFetch(`/api/activities?format=${format}`);
@@ -96,6 +99,47 @@ export default function ActivityList({
       alert("Unable to export activities right now.");
     } finally {
       setExporting(null);
+    }
+  }
+
+  async function downloadTemplate(format: "csv" | "xlsx") {
+    try {
+      const res = await authFetch(`/api/activities/import?format=${format}`);
+      if (!res.ok) throw new Error("Template download failed");
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `activities-import-template.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } catch {
+      alert("Unable to download import template.");
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await authFetch("/api/activities/import", {
+        method: "POST",
+        body,
+      });
+      const data = await res.json();
+      setImportResult({ imported: data.imported ?? 0, errors: data.errors ?? [] });
+      if (data.imported > 0) onRefresh();
+    } catch {
+      setImportResult({ imported: 0, errors: [{ row: 0, message: "Upload failed" }] });
+    } finally {
+      setImporting(false);
+      e.target.value = "";
     }
   }
 
@@ -192,36 +236,103 @@ export default function ActivityList({
   return (
     <div id="activity-list">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mr-auto">
           {total} total entr{total === 1 ? "y" : "ies"}
         </p>
-        <div className="flex items-center gap-2">
+        {/* Export group */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-xs text-zinc-400 mr-1">Export:</span>
+          {(["json", "csv", "xlsx", "docx"] as const).map((fmt) => (
+            <button
+              key={fmt}
+              id={`export-${fmt}-btn`}
+              onClick={() => void exportActivities(fmt)}
+              disabled={exporting !== null}
+              className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-2.5 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+            >
+              {fmt.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {/* Import button */}
+        <button
+          onClick={() => { setShowImportPanel((v) => !v); setImportResult(null); }}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
+        >
+          📂 Import
+        </button>
+        <button
+          id="add-activity-btn"
+          onClick={() => setAddingManual(true)}
+          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+        >
+          + Add manual entry
+        </button>
+      </div>
+
+      {/* Import panel */}
+      {showImportPanel && (
+        <div className="mb-4 rounded-xl bg-white dark:bg-zinc-800 shadow p-4 space-y-3">
+          <h3 className="font-semibold text-zinc-800 dark:text-zinc-200">
+            Import Activities
+          </h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Supported formats: <strong>.csv</strong>, <strong>.json</strong>, <strong>.xlsx</strong>.
+            Download a template to see the required columns.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => void downloadTemplate("csv")}
+              className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-2.5 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
+            >
+              ⬇ CSV Template
+            </button>
+            <button
+              onClick={() => void downloadTemplate("xlsx")}
+              className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-2.5 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50"
+            >
+              ⬇ Excel Template
+            </button>
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-500">Choose file to import:</span>
+            <input
+              type="file"
+              accept=".csv,.json,.xlsx"
+              disabled={importing}
+              onChange={handleImportFile}
+              className="text-sm text-zinc-700 dark:text-zinc-300 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-blue-700"
+            />
+          </label>
+          {importing && (
+            <p className="text-xs text-zinc-400">Importing…</p>
+          )}
+          {importResult && (
+            <div className={`rounded-lg p-3 text-xs ${importResult.imported > 0 ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"}`}>
+              {importResult.imported > 0 && (
+                <p>✓ Imported {importResult.imported} activit{importResult.imported === 1 ? "y" : "ies"}.</p>
+              )}
+              {importResult.errors.length > 0 && (
+                <div className="mt-1">
+                  <p className="font-semibold">Skipped rows:</p>
+                  <ul className="list-disc list-inside space-y-0.5 mt-0.5">
+                    {importResult.errors.map((e, i) => (
+                      <li key={i}>Row {e.row}: {e.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <button
-            id="export-json-btn"
-            onClick={() => void exportActivities("json")}
-            disabled={exporting !== null}
-            className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+            onClick={() => setShowImportPanel(false)}
+            className="text-xs text-zinc-400 hover:text-zinc-600"
           >
-            Export JSON
-          </button>
-          <button
-            id="export-csv-btn"
-            onClick={() => void exportActivities("csv")}
-            disabled={exporting !== null}
-            className="rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
-          >
-            Export CSV
-          </button>
-          <button
-            id="add-activity-btn"
-            onClick={() => setAddingManual(true)}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            + Add manual entry
+            Close
           </button>
         </div>
-      </div>
+      )}
 
       {/* Add manual entry form */}
       {addingManual && (

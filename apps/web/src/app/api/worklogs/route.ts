@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { withAuth, apiError } from "@/lib/api-helpers";
 import { getDb } from "@/lib/db";
-import { toCsv } from "@/lib/export-utils";
+import { toCsv, toExcel, toWord } from "@/lib/export-utils";
 import type { JWTPayload } from "@/types";
 
 // GET /api/worklogs?logged=0|1&page=1&limit=50
@@ -30,7 +30,7 @@ export const GET = withAuth(
         .get(...params) as { c: number }
     ).c;
 
-    if (format === "json" || format === "csv") {
+    if (format === "json" || format === "csv" || format === "xlsx" || format === "docx") {
       const rows = db
         .prepare(
           `SELECT wd.*, a.title as activity_title, a.occurred_at, a.source
@@ -40,6 +40,20 @@ export const GET = withAuth(
            ORDER BY a.occurred_at DESC LIMIT 5000`
         )
         .all(...params) as Array<Record<string, unknown>>;
+
+      const columns = [
+        "id",
+        "activity_id",
+        "ticket_number",
+        "description",
+        "time_spent",
+        "logged",
+        "activity_title",
+        "source",
+        "occurred_at",
+        "created_at",
+        "updated_at",
+      ];
 
       if (format === "json") {
         return NextResponse.json(
@@ -56,24 +70,36 @@ export const GET = withAuth(
         );
       }
 
-      const columns = [
-        "id",
-        "activity_id",
-        "ticket_number",
-        "description",
-        "time_spent",
-        "logged",
-        "activity_title",
-        "source",
-        "occurred_at",
-        "created_at",
-        "updated_at",
-      ];
-      return new NextResponse(toCsv(rows, columns), {
+      if (format === "csv") {
+        return new NextResponse(toCsv(rows, columns), {
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": 'attachment; filename="worklogs.csv"',
+          },
+        });
+      }
+
+      if (format === "xlsx") {
+        const buf = await toExcel(rows, columns, "Worklogs");
+        return new NextResponse(buf, {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": 'attachment; filename="worklogs.xlsx"',
+          },
+        });
+      }
+
+      // format === "docx"
+      const buf = await toWord("Worklog Drafts Export", rows, columns);
+      return new NextResponse(buf, {
         status: 200,
         headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": 'attachment; filename="worklogs.csv"',
+          "Content-Type":
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "Content-Disposition": 'attachment; filename="worklogs.docx"',
         },
       });
     }
